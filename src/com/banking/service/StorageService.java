@@ -6,7 +6,7 @@ import com.banking.exceptions.DuplicateIDException;
 import com.banking.exceptions.PersistenceException;
 import com.banking.exceptions.ValidationException;
 
-public interface CustomerService {
+public interface StorageService {
 
 	void saveAllCusts(List<Customer> customers) throws DuplicateIDException, ValidationException, PersistenceException;
 	List<Customer> retrieveAllCusts();

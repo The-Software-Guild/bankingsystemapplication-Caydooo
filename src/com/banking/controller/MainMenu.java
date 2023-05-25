@@ -4,8 +4,8 @@ import java.util.List;
 import java.util.Scanner;
 
 import com.banking.dto.Customer;
-import com.banking.service.CustomerService;
-import com.banking.service.CustomerServiceImplementation;
+import com.banking.service.StorageService;
+import com.banking.service.StorageServiceImplementation;
 import com.banking.dao.FileStorageDao;
 import com.banking.exceptions.CustomerNotFoundException;
 import com.banking.exceptions.DuplicateIDException;
@@ -30,7 +30,7 @@ public class MainMenu {
 	public static void main(String[] args) {
 		boolean cont = true;
 		Customer c = new Customer();
-		CustomerService service = new CustomerServiceImplementation();
+		StorageService service = new StorageServiceImplementation();
 		List<Customer> customers = service.retrieveAllCusts();
 		c.initializeCollection(customers);
 		

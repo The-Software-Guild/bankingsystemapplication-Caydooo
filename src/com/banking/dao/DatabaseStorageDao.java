@@ -14,7 +14,7 @@ import com.banking.dto.FixedDepositAccount;
 import com.banking.dto.SavingsAccount;
 import com.banking.dto.Customer;
 
-public class DatabaseStorageDao implements Idao {
+public class DatabaseStorageDao implements StorageDao {
 
 	private Connection openConnection() {
 		Connection con = null;
@@ -23,7 +23,7 @@ public class DatabaseStorageDao implements Idao {
 			Class.forName("com.mysql.jdbc.Driver");
 			//System.out.println("MySQL driver registered with DriverManager");
 			
-			con = DriverManager.getConnection("jdbc:mysql://localhost:3307/banksystem", "root", "root");
+			con = DriverManager.getConnection("jdbc:mysql://localhost:3307/bankingsystem", "root", "root");
 			//System.out.println(con);
 		} catch (ClassNotFoundException e) {
 			System.out.println("MySQL suitable driver not found");
@@ -70,7 +70,13 @@ public class DatabaseStorageDao implements Idao {
 						pStatement.setLong(1, accountNum);
 						
 						int del = pStatement.executeUpdate();
-					}	
+					}
+					
+					String deleteBankAccountSql = "DELETE FROM bankaccount WHERE accountNum=?";
+					PreparedStatement pStatement = con.prepareStatement(deleteBankAccountSql);
+					pStatement.setLong(1, accountNum);
+					
+					int del = pStatement.executeUpdate();
 				}
 				
 				/*if(customer.getCustomerId() == 103) {
@@ -92,15 +98,6 @@ public class DatabaseStorageDao implements Idao {
 				pStatement.setInt(1, customerId);
 				
 				int del = pStatement.executeUpdate();
-			    
-			    if(customer.getBankAcc() != null) {
-			    	long accountNum = customer.getBankAcc().getAccountNum();
-			    	String deleteBankAccountSql = "DELETE FROM bankaccount WHERE accountNum=?";
-					pStatement = con.prepareStatement(deleteBankAccountSql);
-					pStatement.setLong(1, accountNum);
-					
-					del = pStatement.executeUpdate();
-			    }
 			} catch (SQLException e1) {
 				e1.printStackTrace();
 			}
@@ -159,25 +156,44 @@ public class DatabaseStorageDao implements Idao {
 			}
 			
 			try {
+				//First INSERT - Customer
+				
+				String customerSql = "INSERT INTO customer (customerId, customerName, dob, age, mobileNum, "
+						+ "passportNum) VALUES (?, ?, ?, ?, ?, ?);";
+				PreparedStatement pStatement = con.prepareStatement(customerSql);
+				
+				pStatement.setInt(1, customerId);
+				pStatement.setString(2, customerName);
+				pStatement.setString(3, dob);
+				pStatement.setInt(4, age);
+				pStatement.setString(5, mobileNum);
+				pStatement.setString(6, passportNum);
+				
+				int n = pStatement.executeUpdate();
+
+				//System.out.println(customerSql);
+				customerCounter++;
+				
 				if(hasBankAccount) {
-					//First INSERT - BankAccount
+					//Second INSERT - BankAccount
 					
-					String bankAccountSql = "INSERT INTO bankaccount (accountNum, bsbCode, bankName, balance, openingDate)"
-							+ " VALUES (?, ?, ?, ?, ?);";
-					PreparedStatement pStatement = con.prepareStatement(bankAccountSql);
+					String bankAccountSql = "INSERT INTO bankaccount (accountNum, bsbCode, bankName, balance, openingDate, customerId)"
+							+ " VALUES (?, ?, ?, ?, ?, ?);";
+					pStatement = con.prepareStatement(bankAccountSql);
 					
 					pStatement.setLong(1, accountNum);
 					pStatement.setLong(2, bsbCode);
 					pStatement.setString(3, bankName);
 					pStatement.setDouble(4, balance);
 					pStatement.setString(5, openingDate);
+					pStatement.setInt(6, customerId);
 					
-					int n = pStatement.executeUpdate();
+					n = pStatement.executeUpdate();
 
 					//System.out.println(bankAccountSql);
 					bankAccountCounter++;
 					
-					//Second INSERT - SavingsAccount OR FixedDepositAccount
+					//Third INSERT - SavingsAccount OR FixedDepositAccount
 					
 					if(customer.getBankAcc() instanceof SavingsAccount) {
 						String savingsAccountSql = "INSERT INTO savingsaccount (accountNum, isSalaryAccount, interestEarned)"
@@ -213,30 +229,7 @@ public class DatabaseStorageDao implements Idao {
 					}
 					
 				}
-				
-				//Third INSERT - Customer
-				
-				String customerSql = "INSERT INTO customer (customerId, customerName, dob, age, mobileNum, "
-						+ "passportNum, accountNum) VALUES (?, ?, ?, ?, ?, ?, ?);";
-				PreparedStatement pStatement = con.prepareStatement(customerSql);
-				
-				pStatement.setInt(1, customerId);
-				pStatement.setString(2, customerName);
-				pStatement.setString(3, dob);
-				pStatement.setInt(4, age);
-				pStatement.setString(5, mobileNum);
-				pStatement.setString(6, passportNum);
-				if(hasBankAccount) {
-					pStatement.setLong(7, accountNum);			
-				} else {
-					pStatement.setNull(7, Types.NULL);
-				}
-				
-				int n = pStatement.executeUpdate();
 
-				//System.out.println(customerSql);
-				customerCounter++;
-				
 				pStatement.close();
 				
 			} catch (SQLException e) {
@@ -272,82 +265,78 @@ public class DatabaseStorageDao implements Idao {
 				String passportNum = rSet.getString("passportNum");
 				BankAccount bankAccount = null;
 				
-				if(rSet.getLong("accountNum") != 0) {
-					//BankAccount//	
-					long accountNum = rSet.getLong("accountNum");
+				//BankAccount//	
+				String bankAccountSql = "SELECT * FROM bankaccount WHERE customerId=?;";
+				pStatement = con.prepareStatement(bankAccountSql);
 					
-					String bankAccountSql = "SELECT * FROM bankaccount WHERE accountNum=?;";
-					pStatement = con.prepareStatement(bankAccountSql);
+				pStatement.setLong(1, customerId);
+				ResultSet rs = pStatement.executeQuery();
 					
+				while(rs.next()) {
+					long accountNum = rs.getLong("accountNum");
+					long bsbCode = rs.getLong("bsbCode");
+					String bankName = rs.getString("bankName");
+					double balance = rs.getDouble("balance");
+					String openingDate = rs.getString("openingDate");
+						
+					//SavingsAccount or FixedDepositAccount//		
+					//testing for SavingsAccount, if return 0 then it is a FixedDepositAccount
+					String savingsAccountCounter = "SELECT COUNT(*) FROM savingsaccount WHERE accountNum=?;";
+					boolean isSavingsAccount = true;
+					pStatement = con.prepareStatement(savingsAccountCounter);
+						
 					pStatement.setLong(1, accountNum);
-					ResultSet rs = pStatement.executeQuery();
-					
+					rs = pStatement.executeQuery();
+						
 					while(rs.next()) {
-						accountNum = rs.getLong("accountNum");
-						long bsbCode = rs.getLong("bsbCode");
-						String bankName = rs.getString("bankName");
-						double balance = rs.getDouble("balance");
-						String openingDate = rs.getString("openingDate");
+						if(rs.getInt(1) == 0) {
+							System.out.println("Customer has FixedDepositAccount");
+							isSavingsAccount = false;
+							break;
+						} else {
+							System.out.println("Customer has SavingsAccount");
+							isSavingsAccount = true;
+							break;
+						}	
+					}
 						
-						//SavingsAccount or FixedDepositAccount//		
-						//testing for SavingsAccount, if return 0 then it is a FixedDepositAccount
-						String savingsAccountCounter = "SELECT COUNT(*) FROM savingsaccount WHERE accountNum=?;";
-						boolean isSavingsAccount = true;
-						pStatement = con.prepareStatement(savingsAccountCounter);
-						
+					if(isSavingsAccount) {
+						//SavingsAccount//
+						String savingsAccountSql = "SELECT * FROM savingsaccount WHERE accountNum=?;";
+						pStatement = con.prepareStatement(savingsAccountSql);
+							
 						pStatement.setLong(1, accountNum);
 						rs = pStatement.executeQuery();
-						
+							
 						while(rs.next()) {
-							if(rs.getInt(1) == 0) {
-								System.out.println("Customer has FixedDepositAccount");
-								isSavingsAccount = false;
-								break;
-							} else {
-								System.out.println("Customer has SavingsAccount");
-								isSavingsAccount = true;
-								break;
-							}	
+							accountNum = rs.getLong("accountNum");
+							boolean isSalaryAccount = rs.getBoolean("isSalaryAccount");
+							double interestEarned = rs.getDouble("interestEarned");
+							
+							bankAccount = new SavingsAccount(accountNum, bsbCode, bankName, balance, openingDate, isSalaryAccount, interestEarned);
 						}
-						
-						if(isSavingsAccount) {
-							//SavingsAccount//
-							String savingsAccountSql = "SELECT * FROM savingsaccount WHERE accountNum=?;";
-							pStatement = con.prepareStatement(savingsAccountSql);
 							
-							pStatement.setLong(1, accountNum);
-							rs = pStatement.executeQuery();
+					} else {
+						//FixedDepositAccount//
+						String fixedDepositSql = "SELECT * FROM fixeddepositaccount WHERE accountNum=?;";
+						pStatement = con.prepareStatement(fixedDepositSql);
 							
-							while(rs.next()) {
-								accountNum = rs.getLong("accountNum");
-								boolean isSalaryAccount = rs.getBoolean("isSalaryAccount");
-								double interestEarned = rs.getDouble("interestEarned");
+						pStatement.setLong(1, accountNum);
+						rs = pStatement.executeQuery();
+							
+						while(rs.next()) {
+							accountNum = rs.getLong("accountNum");
+							double depositAmount = rs.getDouble("depositAmount");
+							int tenure = rs.getInt("tenure");
+							double interestEarned = rs.getDouble("interestEarned");
 								
-								bankAccount = new SavingsAccount(accountNum, bsbCode, bankName, balance, openingDate, isSalaryAccount, interestEarned);
-							}
-							
-						} else {
-							//FixedDepositAccount//
-							String fixedDepositSql = "SELECT * FROM fixeddepositaccount WHERE accountNum=?;";
-							pStatement = con.prepareStatement(fixedDepositSql);
-							
-							pStatement.setLong(1, accountNum);
-							rs = pStatement.executeQuery();
-							
-							while(rs.next()) {
-								accountNum = rs.getLong("accountNum");
-								double depositAmount = rs.getDouble("depositAmount");
-								int tenure = rs.getInt("tenure");
-								double interestEarned = rs.getDouble("interestEarned");
-								
-								bankAccount = new FixedDepositAccount(accountNum, bsbCode, bankName, balance, openingDate, depositAmount, tenure, interestEarned);
-							}
+							bankAccount = new FixedDepositAccount(accountNum, bsbCode, bankName, balance, openingDate, depositAmount, tenure, interestEarned);
 						}
 					}
 				}
-					Customer customer = new Customer(customerId, customerName, dob, age, mobileNum, passportNum);
-					customer.setBankAcc(bankAccount);
-					customers.add(customer);
+				Customer customer = new Customer(customerId, customerName, dob, age, mobileNum, passportNum);
+				customer.setBankAcc(bankAccount);
+				customers.add(customer);
 			}
 		} catch (SQLException e) {
 			e.printStackTrace();
@@ -357,7 +346,6 @@ public class DatabaseStorageDao implements Idao {
 		return customers;
 	}
 
-	@Override
 	public Customer retrieveCustomer(String name) {
 		Connection con = openConnection();
 		
@@ -391,76 +379,73 @@ public class DatabaseStorageDao implements Idao {
 						String passportNum = rs.getString("passportNum");
 						BankAccount bankAccount = null;
 							
-						if(rs.getLong("accountNum") != 0) {
-							//BankAccount//	
-							long accountNum = rs.getLong("accountNum");
-								
-							String bankAccountSql = "SELECT * FROM bankaccount WHERE accountNum=?;";
-							pStatement = con.prepareStatement(bankAccountSql);
+						//BankAccount//	
+						String bankAccountSql = "SELECT * FROM bankaccount WHERE customerId=?;";
+						pStatement = con.prepareStatement(bankAccountSql);
 							
+						pStatement.setLong(1, customerId);
+						rs = pStatement.executeQuery();
+							
+						while(rs.next()) {
+							long accountNum = rs.getLong("accountNum");
+							long bsbCode = rs.getLong("bsbCode");
+							String bankName = rs.getString("bankName");
+							double balance = rs.getDouble("balance");
+							String openingDate = rs.getString("openingDate");
+								
+							//SavingsAccount or FixedDepositAccount//		
+							//testing for SavingsAccount, if return 0 then it is a FixedDepositAccount
+							String savingsAccountCounter = "SELECT COUNT(*) FROM savingsaccount WHERE accountNum=?;";
+							boolean isSavingsAccount = true;
+							pStatement = con.prepareStatement(savingsAccountCounter);
+								
 							pStatement.setLong(1, accountNum);
 							rs = pStatement.executeQuery();
 								
 							while(rs.next()) {
-								accountNum = rs.getLong("accountNum");
-								long bsbCode = rs.getLong("bsbCode");
-								String bankName = rs.getString("bankName");
-								double balance = rs.getDouble("balance");
-								String openingDate = rs.getString("openingDate");
-									
-								//SavingsAccount or FixedDepositAccount//		
-								//testing for SavingsAccount, if return 0 then it is a FixedDepositAccount
-								String savingsAccountCounter = "SELECT COUNT(*) FROM savingsaccount WHERE accountNum=?;";
-								boolean isSavingsAccount = true;
-								pStatement = con.prepareStatement(savingsAccountCounter);
+								if(rs.getInt(1) == 0) {
+									System.out.println("Customer has FixedDepositAccount");
+									isSavingsAccount = false;
+									break;
+								} else {
+									System.out.println("Customer has SavingsAccount");
+									isSavingsAccount = true;
+									break;
+								}	
+							}
+								
+							if(isSavingsAccount) {
+								//SavingsAccount//
+								String savingsAccountSql = "SELECT * FROM savingsaccount WHERE accountNum=?;";
+								pStatement = con.prepareStatement(savingsAccountSql);
 									
 								pStatement.setLong(1, accountNum);
 								rs = pStatement.executeQuery();
 									
 								while(rs.next()) {
-									if(rs.getInt(1) == 0) {
-										System.out.println("Customer has FixedDepositAccount");
-										isSavingsAccount = false;
-										break;
-									} else {
-										System.out.println("Customer has SavingsAccount");
-										isSavingsAccount = true;
-										break;
-									}	
-								}
-								if(isSavingsAccount) {
-									//SavingsAccount//
-									String savingsAccountSql = "SELECT * FROM savingsaccount WHERE accountNum=?;";
-									pStatement = con.prepareStatement(savingsAccountSql);
-										
-									pStatement.setLong(1, accountNum);
-									rs = pStatement.executeQuery();
-										
-									while(rs.next()) {
-										accountNum = rs.getLong("accountNum");
-										boolean isSalaryAccount = rs.getBoolean("isSalaryAccount");
-										double interestEarned = rs.getDouble("interestEarned");
-											
-										bankAccount = new SavingsAccount(accountNum, bsbCode, bankName, balance, openingDate, isSalaryAccount, interestEarned);
-									}	
-								} else {
-									//FixedDepositAccount//
-									String fixedDepositSql = "SELECT * FROM fixeddepositaccount WHERE accountNum=?;";
-									pStatement = con.prepareStatement(fixedDepositSql);
-										
-									pStatement.setLong(1, accountNum);
-									rs = pStatement.executeQuery();
+									accountNum = rs.getLong("accountNum");
+									boolean isSalaryAccount = rs.getBoolean("isSalaryAccount");
+									double interestEarned = rs.getDouble("interestEarned");
 									
-									while(rs.next()) {
-										accountNum = rs.getLong("accountNum");
-										double depositAmount = rs.getDouble("depositAmount");
-										int tenure = rs.getInt("tenure");
-										double interestEarned = rs.getDouble("interestEarned");
-											
-										bankAccount = new FixedDepositAccount(accountNum, bsbCode, bankName, balance, openingDate, depositAmount, tenure, interestEarned);
-									}
+									bankAccount = new SavingsAccount(accountNum, bsbCode, bankName, balance, openingDate, isSalaryAccount, interestEarned);
 								}
-								
+									
+							} else {
+								//FixedDepositAccount//
+								String fixedDepositSql = "SELECT * FROM fixeddepositaccount WHERE accountNum=?;";
+								pStatement = con.prepareStatement(fixedDepositSql);
+									
+								pStatement.setLong(1, accountNum);
+								rs = pStatement.executeQuery();
+									
+								while(rs.next()) {
+									accountNum = rs.getLong("accountNum");
+									double depositAmount = rs.getDouble("depositAmount");
+									int tenure = rs.getInt("tenure");
+									double interestEarned = rs.getDouble("interestEarned");
+										
+									bankAccount = new FixedDepositAccount(accountNum, bsbCode, bankName, balance, openingDate, depositAmount, tenure, interestEarned);
+								}
 							}
 						}
 						customer = new Customer(customerId, customerName, dob, age, mobileNum, passportNum);

@@ -13,7 +13,7 @@ import java.util.List;
 
 import com.banking.dto.Customer;
 
-public class FileStorageDao implements Idao {
+public class FileStorageDao implements StorageDao {
 
 	@Override
 	public void saveAllCustomers(List<Customer> customers) {
@@ -77,11 +77,5 @@ public class FileStorageDao implements Idao {
 			}
 		}
 		return null;
-	}
-
-	@Override
-	public Customer retrieveCustomer(String name) {
-		return null;
-	}
-	
+	}	
 }
